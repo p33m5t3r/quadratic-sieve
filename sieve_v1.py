@@ -12,6 +12,8 @@ import pstats
 from pstats import SortKey
 
 
+PROFILE = False
+
 
 def profile(func):
     def wrapper(*args, **kwargs):
@@ -22,8 +24,9 @@ def profile(func):
         s = io.StringIO()
         sortby = SortKey.CUMULATIVE  # 'cumulative'
         ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats()
-        print(s.getvalue())
+        if PROFILE:
+            ps.print_stats()
+            print(s.getvalue())
         return retval
 
     return wrapper
@@ -64,7 +67,11 @@ class factor_tree:
             self.factors.update({f: 1})
 
     def is_b_smooth(self, b: int) -> bool:
-        return b >= max([k for k in self.factors])
+        fs = [k for k in self.factors]
+        if len(fs) == 0:
+            return False
+        else:
+            return b >= max([k for k in self.factors])
 
     def to_exp_vec_g2(self, factor_base: list) -> np.array:
         return np.array([self.factors[p] % 2 if p in self.factors else 0 for p in factor_base])
@@ -101,36 +108,15 @@ def rho(n):
 
     return d
 
-def second_grade(i, x):
-      while 1:
-          if x % i == 0:
-              return x//i, i
-          else:
-              i = i+1
 
 def factor(n: int) -> factor_tree:
     f = factor_tree(n)
     n, last_p, f1 = try_small_primes(n, CONST_SMALL_PRIMES)
     for factor in f1:
         f.add_factor(factor)
-
-    tried_rho = False
-    i = last_p
-    while n > 1:
-        if not tried_rho:
-            p = rho(n)
-            if p != 1 and p != n and n % p == 1:
-                n //= p
-                f.add_factor(p)
-                tried_rho = False
-            else:
-                tried_rho = True
-        
-        n, slow_f = second_grade(i, n)
-        f.add_factor(slow_f)
-        tried_rho = False
-
-    return f 
+    if n == 0:
+        return factor_tree(0)
+    return f
 
 
 # returns b relations, i.e. b equations s.t. for (x, f):
@@ -144,39 +130,39 @@ def sieve(n: int, b: int) -> list:
     while len(relations) < primes_less_than(b):
         y = pow( floor_sqrt_n + x , 2, n )
         f = factor(y)
-        if f.is_b_smooth(b):
-            print(f"found relation for x={x}:  {f}")
+        if f.n != 0 and f.is_b_smooth(b):
+            # print(f"found relation for x={x}:  {f}")
             relations.append((x + floor_sqrt_n, f))
             # TODO: if we happened to find a fermat square, check gcd immediately
-            # i.e. if every p in n has an even exponent, immediately check gcd
+                # i.e. if every p in n has an even exponent, immediately check gcd
         
         x += 1
-
+    
+    print(f"found {len(relations)}...")
     return relations
 
 
+# avert your eyes
 def combine_relations(n: int, r: list) -> int:
     factor_base = reduce(np.union1d, [list(rel[1].factors.keys()) for rel in r])
     exp_matrix = np.array([rel[1].to_exp_vec_g2(factor_base) for rel in r])
     ys = np.array([rel[1].n for rel in r])
     xs = np.array([rel[0] for rel in r])
 
-    print(exp_matrix)
+    # print(exp_matrix)
 
     g2 = GF2(exp_matrix)
     k = g2.co_ker()
-    print(f"computed left-null-space of exponent matrix... {k}")
-    print(ys)
+
+    print(f"found basis of shape {k.shape} for left-null-space of exp. matrix")
+    # print(ys)
     for basis in k:
-        try:
-            y_guess = int(math.sqrt(np.product(np.array([yn if vn else 1 for yn, vn in zip(ys, basis)]))))
-        except ValueError:
-            y_guess = 1
-        print(f"y_guess: {y_guess}")
+        y_guess = int(math.sqrt(abs(np.product(np.array([yn if vn else 1 for yn, vn in zip(ys, basis)])))))
+        # print(f"y_guess: {y_guess}")
         x_guess = np.prod(np.array([xn if vn else 1 for xn, vn in zip(xs, basis)]))
-        print(f"x_guess: {x_guess}")
+        # print(f"x_guess: {x_guess}")
         d = math.gcd(y_guess - x_guess, n)
-        print(f"gcd({y_guess} - {x_guess}, {n}) = {d}")
+        # print(f"gcd({y_guess} - {x_guess}, {n}) = {d}")
         if d != n and d != 1:
             return d
 
@@ -185,7 +171,7 @@ def combine_relations(n: int, r: list) -> int:
 
 @profile
 def run(n):
-    b = 200
+    b = 20_000
     st0 = time.perf_counter()
     r = sieve(n, b)
     st1 = time.perf_counter()
@@ -208,18 +194,21 @@ def run(n):
     else:
         print("Failed to find a factor!")
 
-'''
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        n = int(sys.argv[1])
-        # b = math.floor(n ** (2/5))
-        b = 200
+        if sys.argv[1] == 'all':
+            ns = [22504204457389, 50013360979327, 874290122567, 19912039333033, 16532565756937, 11607579409399, 
+                  53721951108809, 2290151474879, 10488834374147, 60977625124747, 8011824956321, 277475436907,
+                  41908143780523, 23280873878233, 1999879205591, 25709855395261, 7187004956569]
+            for n in ns:
+                run(n)
+        else:
+            n = int(sys.argv[1])
+            run(n)
     else:
-        n = 5917
-        b = 24
-
-'''
-run(496189753)
+        run(4163679007)
 
 
 

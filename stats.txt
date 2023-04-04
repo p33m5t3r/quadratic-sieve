@@ -1,4 +1,4 @@
 
 sieve_v1.py:
-    factored 496189753 = 6311 * 78623 in ~23.6s. ~98% of the time was spent doing naive trial division 
+    can factor most 10-digit numbers in around 1s, but is buggy and randomly fails to factor numbers constantly
 
